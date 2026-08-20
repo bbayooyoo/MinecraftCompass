@@ -1,13 +1,23 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
     <meta charset="UTF-8">
+
     <meta name="viewport"
           content="width=device-width, initial-scale=1.0">
 
-    <title>Minecraft Compass</title>
+    <title>조영이의 마크 나침반 구현</title>
+
+    <!-- Leaflet CSS -->
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        crossorigin=""
+    >
 
     <style>
+
         * {
             box-sizing: border-box;
         }
@@ -16,55 +26,43 @@
             margin: 0;
             min-height: 100vh;
 
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-
             background: #111;
             color: white;
 
             font-family: Arial, sans-serif;
+
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         h1 {
-            margin-bottom: 25px;
+            margin: 20px 0;
         }
 
-        #compass {
-            width: 160px;
-            height: 160px;
+        #map {
+            width: 95%;
+            height: 500px;
 
-            image-rendering: pixelated;
+            border-radius: 8px;
         }
 
-        #direction {
-            margin-top: 20px;
-            font-size: 22px;
-        }
+        #locationInfo {
+            width: 95%;
+            max-width: 600px;
 
-        #frameInfo {
-            margin-top: 8px;
-            font-size: 16px;
-        }
-
-        #sensorInfo {
-            margin-top: 20px;
-            padding: 12px;
-
-            width: 90%;
-            max-width: 400px;
+            margin-top: 15px;
+            padding: 15px;
 
             background: #222;
 
-            font-size: 14px;
-            line-height: 1.6;
-
             text-align: center;
+
+            line-height: 1.6;
         }
 
         button {
-            margin-top: 20px;
+            margin-top: 15px;
 
             padding: 12px 24px;
 
@@ -74,298 +72,235 @@
             font-size: 16px;
         }
 
-        button:disabled {
-            opacity: 0.5;
-        }
     </style>
+
 </head>
+
 
 <body>
 
     <h1>Minecraft Compass</h1>
 
-    <img
-        id="compass"
-        src="compass/frame_0001.png"
-        alt="Minecraft Compass"
-    >
 
-    <div id="direction">
-        방향: --°
+    <!-- 지도 -->
+
+    <div id="map"></div>
+
+
+    <!-- 위치 정보 -->
+
+    <div id="locationInfo">
+        현재 위치를 확인하는 중...
     </div>
 
-    <div id="frameInfo">
-        프레임: 1 / 28
-    </div>
 
-    <div id="sensorInfo">
-        센서 대기 중...
-    </div>
-
-    <button id="startButton">
-        나침반 시작
+    <button id="locationButton">
+        현재 위치 가져오기
     </button>
 
 
-<script>
+    <!-- Leaflet JavaScript -->
 
-    // =========================================
-    // 기본 설정
-    // =========================================
-
-    const FRAME_COUNT = 28;
-
-    const compassImage =
-        document.getElementById("compass");
-
-    const directionText =
-        document.getElementById("direction");
-
-    const frameInfo =
-        document.getElementById("frameInfo");
-
-    const sensorInfo =
-        document.getElementById("sensorInfo");
-
-    const startButton =
-        document.getElementById("startButton");
+    <script
+        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        crossorigin="">
+    </script>
 
 
-    // =========================================
-    // 현재 방향
-    // =========================================
+    <script>
 
-    let currentHeading = 0;
+        // =========================================
+        // 지도 기본 설정
+        // =========================================
 
+        // 처음 표시할 임시 위치
+        // 서울 좌표를 사용한다.
+        // 실제 위치를 가져오면 자동으로 이동한다.
 
-    // =========================================
-    // 각도를 0~360도로 정리
-    // =========================================
-
-    function normalizeAngle(angle) {
-
-        return ((angle % 360) + 360) % 360;
-
-    }
+        const initialLatitude = 37.5665;
+        const initialLongitude = 126.9780;
 
 
-    // =========================================
-    // 각도 → 28개 프레임
-    // =========================================
-
-    function angleToFrame(angle) {
-
-        angle = normalizeAngle(angle);
-
-        const frameSize =
-            360 / FRAME_COUNT;
-
-        let frame =
-            Math.round(angle / frameSize);
-
-        frame = frame % FRAME_COUNT;
-
-        return frame;
-
-    }
+        const map = L.map("map").setView(
+            [initialLatitude, initialLongitude],
+            15
+        );
 
 
-    // =========================================
-    // 프레임 표시
-    // =========================================
+        // =========================================
+        // OpenStreetMap 지도 타일
+        // =========================================
 
-    function showFrame(frame) {
-
-        /*
-         * frame = 0
-         * → frame_0001.png
-         *
-         * frame = 27
-         * → frame_0028.png
-         */
-
-        const fileNumber =
-            String(frame + 1).padStart(4, "0");
-
-        compassImage.src =
-            `compass/frame_${fileNumber}.png`;
-
-        frameInfo.textContent =
-            `프레임: ${frame + 1} / ${FRAME_COUNT}`;
-
-    }
+        L.tileLayer(
+            "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+            {
+                maxZoom: 19,
+                attribution:
+                    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            }
+        ).addTo(map);
 
 
-    // =========================================
-    // 나침반 업데이트
-    // =========================================
+        // =========================================
+        // 현재 위치 마커
+        // =========================================
 
-    function updateCompass(heading) {
-
-        heading =
-            normalizeAngle(heading);
-
-        currentHeading = heading;
-
-        const frame =
-            angleToFrame(heading);
-
-        showFrame(frame);
-
-        directionText.textContent =
-            `방향: ${heading.toFixed(1)}°`;
-
-    }
+        let currentMarker = null;
 
 
-    // =========================================
-    // 센서 데이터 표시
-    // =========================================
+        // =========================================
+        // 화면 요소
+        // =========================================
 
-    function showSensorData(event) {
+        const locationInfo =
+            document.getElementById("locationInfo");
 
-        const alpha =
-            event.alpha === null
-                ? "없음"
-                : event.alpha.toFixed(1);
-
-        const beta =
-            event.beta === null
-                ? "없음"
-                : event.beta.toFixed(1);
-
-        const gamma =
-            event.gamma === null
-                ? "없음"
-                : event.gamma.toFixed(1);
-
-        sensorInfo.innerHTML =
-            `alpha: ${alpha}°<br>` +
-            `beta: ${beta}°<br>` +
-            `gamma: ${gamma}°`;
-
-    }
+        const locationButton =
+            document.getElementById("locationButton");
 
 
-    // =========================================
-    // 방향 센서 이벤트
-    // =========================================
+        // =========================================
+        // 위치 가져오기 성공
+        // =========================================
 
-    function handleOrientation(event) {
+        function handleLocationSuccess(position) {
 
-        // 센서값 확인용
-        showSensorData(event);
+            const latitude =
+                position.coords.latitude;
+
+            const longitude =
+                position.coords.longitude;
+
+            const accuracy =
+                position.coords.accuracy;
 
 
-        /*
-         * Android의 일반적인 경우
-         *
-         * alpha는 기기의 회전값을 나타낸다.
-         *
-         * 우선 센서가 정상적으로 들어오는지
-         * 확인하기 위해 alpha를 사용한다.
-         */
+            // 지도 이동
 
-        if (event.alpha !== null) {
+            map.setView(
+                [latitude, longitude],
+                17
+            );
 
-            const heading =
-                normalizeAngle(360 - event.alpha);
 
-            updateCompass(heading);
+            // 기존 마커가 있으면 삭제
+
+            if (currentMarker !== null) {
+
+                map.removeLayer(currentMarker);
+
+            }
+
+
+            // 새로운 현재 위치 마커 생성
+
+            currentMarker =
+                L.marker(
+                    [latitude, longitude]
+                ).addTo(map);
+
+
+            currentMarker.bindPopup(
+                "현재 위치"
+            ).openPopup();
+
+
+            // 위치 정보 표시
+
+            locationInfo.innerHTML =
+                `위도: ${latitude.toFixed(6)}<br>` +
+                `경도: ${longitude.toFixed(6)}<br>` +
+                `위치 정확도: 약 ${accuracy.toFixed(1)} m`;
+
+
+            locationButton.textContent =
+                "현재 위치 업데이트";
 
         }
 
-    }
+
+        // =========================================
+        // 위치 가져오기 실패
+        // =========================================
+
+        function handleLocationError(error) {
+
+            console.error(error);
 
 
-    // =========================================
-    // 센서 시작
-    // =========================================
+            if (error.code === 1) {
 
-    async function startCompass() {
+                locationInfo.textContent =
+                    "위치 권한이 거부되었습니다.";
 
-        sensorInfo.textContent =
-            "센서 권한 확인 중...";
+            }
+            else if (error.code === 2) {
 
+                locationInfo.textContent =
+                    "현재 위치를 확인할 수 없습니다.";
 
-        /*
-         * iOS처럼 명시적인 권한 요청이
-         * 필요한 브라우저가 있는 경우
-         */
+            }
+            else if (error.code === 3) {
 
-        if (
-            typeof DeviceOrientationEvent !== "undefined" &&
-            typeof DeviceOrientationEvent.requestPermission === "function"
-        ) {
+                locationInfo.textContent =
+                    "위치 확인 시간이 초과되었습니다.";
 
-            try {
+            }
+            else {
 
-                const permission =
-                    await DeviceOrientationEvent
-                        .requestPermission();
-
-                if (permission !== "granted") {
-
-                    sensorInfo.textContent =
-                        "센서 권한이 거부되었습니다.";
-
-                    return;
-
-                }
-
-            } catch (error) {
-
-                console.error(error);
-
-                sensorInfo.textContent =
-                    "센서 권한 요청 중 오류가 발생했습니다.";
-
-                return;
+                locationInfo.textContent =
+                    "위치를 가져오는 중 오류가 발생했습니다.";
 
             }
 
         }
 
 
-        /*
-         * 방향 센서 이벤트 등록
-         */
+        // =========================================
+        // GPS 시작
+        // =========================================
 
-        window.addEventListener(
-            "deviceorientation",
-            handleOrientation,
-            true
+        function getCurrentLocation() {
+
+            if (!("geolocation" in navigator)) {
+
+                locationInfo.textContent =
+                    "이 브라우저는 위치 정보를 지원하지 않습니다.";
+
+                return;
+
+            }
+
+
+            locationInfo.textContent =
+                "현재 위치를 확인하는 중...";
+
+
+            navigator.geolocation.getCurrentPosition(
+                handleLocationSuccess,
+                handleLocationError,
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
+
+        }
+
+
+        // =========================================
+        // 버튼 클릭
+        // =========================================
+
+        locationButton.addEventListener(
+            "click",
+            getCurrentLocation
         );
 
 
-        sensorInfo.textContent =
-            "센서 연결됨. 스마트폰을 회전해보세요.";
-
-        startButton.textContent =
-            "나침반 작동 중";
-
-        startButton.disabled = true;
-
-    }
-
-
-    // =========================================
-    // 시작 버튼
-    // =========================================
-
-    startButton.addEventListener(
-        "click",
-        startCompass
-    );
-
-
-    // =========================================
-    // 초기 화면
-    // =========================================
-
-    updateCompass(0);
-
-</script>
+    </script>
 
 </body>
+
 </html>
