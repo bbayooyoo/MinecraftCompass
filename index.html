@@ -7,7 +7,7 @@
     <meta name="viewport"
           content="width=device-width, initial-scale=1.0">
 
-    <title>조영이의 마크 나침반 구현</title>
+    <title>조영이의 짱짱나침반</title>
 
     <!-- Leaflet CSS -->
     <link
@@ -47,7 +47,8 @@
             border-radius: 8px;
         }
 
-        #locationInfo {
+        #locationInfo,
+        #destinationInfo {
             width: 95%;
             max-width: 600px;
 
@@ -59,6 +60,10 @@
             text-align: center;
 
             line-height: 1.6;
+        }
+
+        #destinationInfo {
+            background: #333;
         }
 
         button {
@@ -79,18 +84,31 @@
 
 <body>
 
-    <h1>Minecraft Compass</h1>
+    <h1>조영이의 짱짱나침반</h1>
 
 
-    <!-- 지도 -->
+    <!-- ==============================
+         지도
+    =============================== -->
 
     <div id="map"></div>
 
 
-    <!-- 위치 정보 -->
+    <!-- ==============================
+         현재 위치 정보
+    =============================== -->
 
     <div id="locationInfo">
         현재 위치를 확인하는 중...
+    </div>
+
+
+    <!-- ==============================
+         목적지 정보
+    =============================== -->
+
+    <div id="destinationInfo">
+        지도를 터치해서 목적지를 선택하세요.
     </div>
 
 
@@ -113,10 +131,6 @@
         // 지도 기본 설정
         // =========================================
 
-        // 처음 표시할 임시 위치
-        // 서울 좌표를 사용한다.
-        // 실제 위치를 가져오면 자동으로 이동한다.
-
         const initialLatitude = 37.5665;
         const initialLongitude = 126.9780;
 
@@ -128,13 +142,14 @@
 
 
         // =========================================
-        // OpenStreetMap 지도 타일
+        // OpenStreetMap
         // =========================================
 
         L.tileLayer(
             "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
             {
                 maxZoom: 19,
+
                 attribution:
                     '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             }
@@ -142,10 +157,23 @@
 
 
         // =========================================
-        // 현재 위치 마커
+        // 현재 위치
         // =========================================
 
         let currentMarker = null;
+
+        let currentLatitude = null;
+        let currentLongitude = null;
+
+
+        // =========================================
+        // 목적지
+        // =========================================
+
+        let destinationMarker = null;
+
+        let destinationLatitude = null;
+        let destinationLongitude = null;
 
 
         // =========================================
@@ -155,35 +183,53 @@
         const locationInfo =
             document.getElementById("locationInfo");
 
+        const destinationInfo =
+            document.getElementById("destinationInfo");
+
         const locationButton =
             document.getElementById("locationButton");
 
 
         // =========================================
-        // 위치 가져오기 성공
+        // 각도를 0~360도로 정리
+        // =========================================
+
+        function normalizeAngle(angle) {
+
+            return ((angle % 360) + 360) % 360;
+
+        }
+
+
+        // =========================================
+        // 현재 위치 성공
         // =========================================
 
         function handleLocationSuccess(position) {
 
-            const latitude =
+            currentLatitude =
                 position.coords.latitude;
 
-            const longitude =
+            currentLongitude =
                 position.coords.longitude;
+
 
             const accuracy =
                 position.coords.accuracy;
 
 
-            // 지도 이동
+            // 현재 위치로 지도 이동
 
             map.setView(
-                [latitude, longitude],
+                [
+                    currentLatitude,
+                    currentLongitude
+                ],
                 17
             );
 
 
-            // 기존 마커가 있으면 삭제
+            // 기존 현재 위치 마커 삭제
 
             if (currentMarker !== null) {
 
@@ -192,29 +238,47 @@
             }
 
 
-            // 새로운 현재 위치 마커 생성
+            // 현재 위치 마커 생성
 
             currentMarker =
                 L.marker(
-                    [latitude, longitude]
-                ).addTo(map);
+                    [
+                        currentLatitude,
+                        currentLongitude
+                    ]
+                )
+                .addTo(map);
 
 
-            currentMarker.bindPopup(
-                "현재 위치"
-            ).openPopup();
+            currentMarker
+                .bindPopup("현재 위치")
+                .openPopup();
 
 
-            // 위치 정보 표시
+            // 현재 위치 정보 표시
 
             locationInfo.innerHTML =
-                `위도: ${latitude.toFixed(6)}<br>` +
-                `경도: ${longitude.toFixed(6)}<br>` +
+                `현재 위치<br>` +
+                `위도: ${currentLatitude.toFixed(6)}<br>` +
+                `경도: ${currentLongitude.toFixed(6)}<br>` +
                 `위치 정확도: 약 ${accuracy.toFixed(1)} m`;
 
 
             locationButton.textContent =
                 "현재 위치 업데이트";
+
+
+            // 이미 목적지가 선택되어 있다면
+            // 방위각 다시 계산
+
+            if (
+                destinationLatitude !== null &&
+                destinationLongitude !== null
+            ) {
+
+                calculateBearing();
+
+            }
 
         }
 
@@ -257,7 +321,7 @@
 
 
         // =========================================
-        // GPS 시작
+        // GPS
         // =========================================
 
         function getCurrentLocation() {
@@ -290,7 +354,129 @@
 
 
         // =========================================
-        // 버튼 클릭
+        // 두 위치 사이의 방위각 계산
+        // =========================================
+
+        function calculateBearing() {
+
+            // 현재 위치가 없으면 계산하지 않음
+
+            if (
+                currentLatitude === null ||
+                currentLongitude === null
+            ) {
+
+                destinationInfo.textContent =
+                    "먼저 현재 위치를 가져와 주세요.";
+
+                return;
+
+            }
+
+
+            // 위도/경도를 라디안으로 변환
+
+            const lat1 =
+                currentLatitude * Math.PI / 180;
+
+            const lat2 =
+                destinationLatitude * Math.PI / 180;
+
+
+            const longitudeDifference =
+                (destinationLongitude - currentLongitude)
+                * Math.PI / 180;
+
+
+            // 방위각 계산
+
+            const y =
+                Math.sin(longitudeDifference) *
+                Math.cos(lat2);
+
+
+            const x =
+                Math.cos(lat1) *
+                Math.sin(lat2)
+                -
+                Math.sin(lat1) *
+                Math.cos(lat2) *
+                Math.cos(longitudeDifference);
+
+
+            let bearing =
+                Math.atan2(y, x)
+                * 180 / Math.PI;
+
+
+            // 0~360도로 변환
+
+            bearing =
+                normalizeAngle(bearing);
+
+
+            // 화면 표시
+
+            destinationInfo.innerHTML =
+                `목적지<br>` +
+                `위도: ${destinationLatitude.toFixed(6)}<br>` +
+                `경도: ${destinationLongitude.toFixed(6)}<br>` +
+                `<strong>목적지 방위각: ${bearing.toFixed(1)}°</strong>`;
+
+        }
+
+
+        // =========================================
+        // 지도에서 목적지 선택
+        // =========================================
+
+        map.on(
+            "click",
+            function(event) {
+
+                destinationLatitude =
+                    event.latlng.lat;
+
+                destinationLongitude =
+                    event.latlng.lng;
+
+
+                // 기존 목적지 마커 삭제
+
+                if (destinationMarker !== null) {
+
+                    map.removeLayer(destinationMarker);
+
+                }
+
+
+                // 새로운 목적지 마커 생성
+
+                destinationMarker =
+                    L.marker(
+                        [
+                            destinationLatitude,
+                            destinationLongitude
+                        ]
+                    )
+                    .addTo(map);
+
+
+                destinationMarker
+                    .bindPopup("목적지")
+                    .openPopup();
+
+
+                // 방위각 계산
+
+                calculateBearing();
+
+            }
+        );
+
+
+        // =========================================
+        // 현재 위치 버튼
         // =========================================
 
         locationButton.addEventListener(
@@ -298,6 +484,12 @@
             getCurrentLocation
         );
 
+
+        // =========================================
+        // 페이지 시작
+        // =========================================
+
+        getCurrentLocation();
 
     </script>
 
