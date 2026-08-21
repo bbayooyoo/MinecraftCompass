@@ -10,10 +10,6 @@
     <title>Minecraft Compass</title>
 
 
-    <!-- =========================================
-         Leaflet CSS
-    ========================================== -->
-
     <link
         rel="stylesheet"
         href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -48,10 +44,6 @@
         }
 
 
-        /* =========================================
-           Minecraft Compass
-        ========================================== */
-
         #compass {
             width: 160px;
             height: 160px;
@@ -72,10 +64,6 @@
         }
 
 
-        /* =========================================
-           지도
-        ========================================== */
-
         #map {
             width: 95%;
             height: 400px;
@@ -85,10 +73,6 @@
             border-radius: 8px;
         }
 
-
-        /* =========================================
-           정보
-        ========================================== */
 
         #locationInfo,
         #destinationInfo,
@@ -105,7 +89,6 @@
             text-align: center;
 
             line-height: 1.6;
-
         }
 
 
@@ -119,12 +102,7 @@
         }
 
 
-        /* =========================================
-           버튼
-        ========================================== */
-
         button {
-
             margin-top: 12px;
 
             padding: 12px 24px;
@@ -133,14 +111,11 @@
             border-radius: 6px;
 
             font-size: 16px;
-
         }
 
 
         button:disabled {
-
             opacity: 0.5;
-
         }
 
     </style>
@@ -153,10 +128,6 @@
 
     <h1>Minecraft Compass</h1>
 
-
-    <!-- =========================================
-         Minecraft 나침반
-    ========================================== -->
 
     <img
         id="compass"
@@ -175,57 +146,28 @@
     </div>
 
 
-    <!-- =========================================
-         지도
-    ========================================== -->
-
     <div id="map"></div>
 
-
-    <!-- =========================================
-         현재 위치
-    ========================================== -->
 
     <div id="locationInfo">
         현재 위치를 확인하는 중...
     </div>
 
 
-    <!-- =========================================
-         목적지
-    ========================================== -->
-
     <div id="destinationInfo">
         지도를 터치해서 목적지를 선택하세요.
     </div>
 
-
-    <!-- =========================================
-         방향 센서
-    ========================================== -->
 
     <div id="sensorInfo">
         방향 센서 대기 중...
     </div>
 
 
-    <!-- =========================================
-         버튼
-    ========================================== -->
-
-    <button id="locationButton">
-        현재 위치 추적 중
-    </button>
-
-
     <button id="startButton">
         나침반 시작
     </button>
 
-
-    <!-- =========================================
-         Leaflet JavaScript
-    ========================================== -->
 
     <script
         src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -243,15 +185,25 @@
         const FRAME_COUNT = 28;
 
         /*
-         * Minecraft 이미지에서
-         * 15번 프레임을 정면으로 사용한다.
+         * Minecraft 나침반에서
+         * 15번 프레임을 정면으로 사용
          */
-
         const FRONT_FRAME = 15;
 
 
+        /*
+         * 센서 heading 보정값
+         *
+         * 일단 0으로 시작한다.
+         *
+         * 실제 기기에서 일정하게 어긋나면
+         * 이 값만 수정하면 된다.
+         */
+        const HEADING_OFFSET = 0;
+
+
         // =========================================
-        // 화면 요소
+        // HTML 요소
         // =========================================
 
         const compassImage =
@@ -272,22 +224,17 @@
         const sensorInfo =
             document.getElementById("sensorInfo");
 
-        const locationButton =
-            document.getElementById("locationButton");
-
         const startButton =
             document.getElementById("startButton");
 
 
         // =========================================
-        // 현재 위치
+        // GPS 변수
         // =========================================
 
         let currentLatitude = null;
 
         let currentLongitude = null;
-
-        let currentAccuracy = null;
 
         let currentMarker = null;
 
@@ -295,7 +242,7 @@
 
 
         // =========================================
-        // 목적지
+        // 목적지 변수
         // =========================================
 
         let destinationLatitude = null;
@@ -308,23 +255,23 @@
 
 
         // =========================================
-        // 현재 스마트폰 heading
+        // 방향 변수
         // =========================================
 
         let currentHeading = null;
-
-        let sensorStarted = false;
 
         let orientationSensor = null;
 
 
         // =========================================
-        // 각도 정리
+        // 각도 정규화
         // =========================================
 
         function normalizeAngle(angle) {
 
-            return ((angle % 360) + 360) % 360;
+            return (
+                (angle % 360) + 360
+            ) % 360;
 
         }
 
@@ -335,8 +282,8 @@
         // 결과:
         // -180 ~ +180
         //
-        // + = 오른쪽
-        // - = 왼쪽
+        // 양수 = 오른쪽
+        // 음수 = 왼쪽
         // =========================================
 
         function angleDifference(
@@ -344,38 +291,11 @@
             current
         ) {
 
-            return normalizeAngle(
-                target - current + 180
-            ) - 180;
-
-        }
-
-
-        // =========================================
-        // 각도 → Minecraft 프레임
-        // =========================================
-
-        function angleToFrame(angle) {
-
-            angle =
-                normalizeAngle(angle);
-
-
-            const frameSize =
-                360 / FRAME_COUNT;
-
-
-            let frame =
-                Math.round(
-                    angle / frameSize
-                );
-
-
-            frame =
-                frame % FRAME_COUNT;
-
-
-            return frame;
+            return (
+                normalizeAngle(
+                    target - current + 180
+                ) - 180
+            );
 
         }
 
@@ -402,15 +322,10 @@
 
 
         // =========================================
-        // 목적지 상대방향 → Minecraft 프레임
+        // 목적지 방향 → Minecraft 프레임
         // =========================================
 
         function updateCompass() {
-
-            /*
-             * 목적지가 없거나
-             * heading을 아직 얻지 못한 경우
-             */
 
             if (
                 destinationBearing === null ||
@@ -434,7 +349,7 @@
             /*
              * 목적지의 절대 방위각
              * -
-             * 현재 스마트폰의 절대 heading
+             * 현재 스마트폰 heading
              *
              * = 스마트폰 기준 목적지 방향
              */
@@ -447,8 +362,9 @@
 
 
             /*
-             * -180~180을
-             * 0~360으로 변환
+             * -180~180
+             * →
+             * 0~360
              */
 
             const compassAngle =
@@ -458,59 +374,65 @@
 
 
             /*
-             * 0°가 정면이 되도록
-             * Minecraft 프레임을 이동한다.
-             *
-             * FRONT_FRAME = 15
+             * 한 프레임당 각도
              */
 
             const frameSize =
                 360 / FRAME_COUNT;
 
 
-            const frameOffset =
+            /*
+             * 정면 = 15번 프레임
+             *
+             * relativeAngle = 0
+             * → frame 15
+             */
+
+            const offset =
                 Math.round(
-                    compassAngle /
-                    frameSize
+                    compassAngle / frameSize
                 );
 
 
             let frame =
-                (FRONT_FRAME - 1)
-                +
-                frameOffset;
-
-
-            frame =
                 (
-                    frame % FRAME_COUNT
+                    FRONT_FRAME - 1
                     +
-                    FRAME_COUNT
+                    offset
                 )
-                %
-                FRAME_COUNT;
+                % FRAME_COUNT;
+
+
+            /*
+             * 음수 방지
+             */
+
+            if (frame < 0) {
+
+                frame += FRAME_COUNT;
+
+            }
 
 
             showFrame(frame);
 
 
             directionText.textContent =
-
                 `목적지 방향: ` +
                 `${relativeAngle.toFixed(1)}° ` +
-                `(${relativeDirectionText(relativeAngle)})`;
+                `(${getDirectionText(relativeAngle)})`;
 
         }
 
 
         // =========================================
-        // 상대 방향 글자
+        // 상대 방향 텍스트
         // =========================================
 
-        function relativeDirectionText(angle) {
+        function getDirectionText(angle) {
 
             if (
-                Math.abs(angle) < 5
+                Math.abs(angle) < 6.5
             ) {
 
                 return "정면";
@@ -518,7 +440,9 @@
             }
 
 
-            if (angle > 0) {
+            if (
+                angle > 0
+            ) {
 
                 return "오른쪽";
 
@@ -531,28 +455,18 @@
 
 
         // =========================================
-        // Leaflet 지도
+        // 지도 생성
         // =========================================
-
-        const initialLatitude =
-            37.5665;
-
-        const initialLongitude =
-            126.9780;
-
 
         const map =
             L.map("map")
-             .setView(
-
-                 [
-                     initialLatitude,
-                     initialLongitude
-                 ],
-
-                 15
-
-             );
+                .setView(
+                    [
+                        37.5665,
+                        126.9780
+                    ],
+                    15
+                );
 
 
         // =========================================
@@ -564,19 +478,17 @@
             "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
 
             {
-
                 maxZoom: 19,
 
                 attribution:
-                    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-
+                    '&copy; OpenStreetMap contributors'
             }
 
         ).addTo(map);
 
 
         // =========================================
-        // 현재 위치 성공
+        // GPS 성공
         // =========================================
 
         function handleLocationSuccess(position) {
@@ -589,7 +501,7 @@
                 position.coords.longitude;
 
 
-            currentAccuracy =
+            const accuracy =
                 position.coords.accuracy;
 
 
@@ -603,55 +515,25 @@
 
                 currentMarker =
                     L.marker(
-
                         [
-
                             currentLatitude,
                             currentLongitude
-
                         ]
-
                     )
                     .addTo(map);
-
-
-                currentMarker
-                    .bindPopup("현재 위치");
 
             }
 
             else {
 
                 currentMarker.setLatLng(
-
                     [
-
                         currentLatitude,
                         currentLongitude
-
                     ]
-
                 );
 
             }
-
-
-            // =====================================
-            // 지도 이동
-            // =====================================
-
-            map.setView(
-
-                [
-
-                    currentLatitude,
-                    currentLongitude
-
-                ],
-
-                map.getZoom()
-
-            );
 
 
             // =====================================
@@ -659,29 +541,44 @@
             // =====================================
 
             locationInfo.innerHTML =
-
                 `현재 위치<br>` +
-
-                `위도: ` +
-                `${currentLatitude.toFixed(6)}<br>` +
-
-                `경도: ` +
-                `${currentLongitude.toFixed(6)}<br>` +
-
-                `위치 정확도: ` +
-                `약 ${currentAccuracy.toFixed(1)} m`;
+                `위도: ${currentLatitude.toFixed(6)}<br>` +
+                `경도: ${currentLongitude.toFixed(6)}<br>` +
+                `정확도: 약 ${accuracy.toFixed(1)} m`;
 
 
-            // =====================================
-            // 목적지가 있으면
-            // 방위각 다시 계산
-            // =====================================
+            /*
+             * 처음 위치를 얻었을 때만
+             * 지도 중심 이동
+             */
 
             if (
+                !map._locationInitialized
+            ) {
 
+                map.setView(
+                    [
+                        currentLatitude,
+                        currentLongitude
+                    ],
+                    17
+                );
+
+
+                map._locationInitialized =
+                    true;
+
+            }
+
+
+            /*
+             * 현재 위치가 바뀌었으므로
+             * 목적지 방위각도 다시 계산
+             */
+
+            if (
                 destinationLatitude !== null &&
                 destinationLongitude !== null
-
             ) {
 
                 calculateBearing();
@@ -692,7 +589,7 @@
 
 
         // =========================================
-        // 위치 실패
+        // GPS 실패
         // =========================================
 
         function handleLocationError(error) {
@@ -730,7 +627,7 @@
             else {
 
                 locationInfo.textContent =
-                    "위치를 가져오는 중 오류가 발생했습니다.";
+                    "위치 정보를 가져올 수 없습니다.";
 
             }
 
@@ -738,7 +635,7 @@
 
 
         // =========================================
-        // 실시간 GPS 위치 추적
+        // GPS 실시간 추적
         // =========================================
 
         function startLocationTracking() {
@@ -748,7 +645,7 @@
             ) {
 
                 locationInfo.textContent =
-                    "이 브라우저는 위치 정보를 지원하지 않습니다.";
+                    "이 브라우저는 GPS를 지원하지 않습니다.";
 
                 return;
 
@@ -764,10 +661,6 @@
             }
 
 
-            locationInfo.textContent =
-                "현재 위치를 확인하는 중...";
-
-
             locationWatchId =
                 navigator.geolocation.watchPosition(
 
@@ -776,20 +669,14 @@
                     handleLocationError,
 
                     {
-
                         enableHighAccuracy: true,
 
                         timeout: 10000,
 
                         maximumAge: 1000
-
                     }
 
                 );
-
-
-            locationButton.textContent =
-                "현재 위치 추적 중";
 
         }
 
@@ -804,9 +691,6 @@
                 currentLatitude === null ||
                 currentLongitude === null
             ) {
-
-                destinationInfo.textContent =
-                    "현재 위치를 먼저 가져와 주세요.";
 
                 return;
 
@@ -859,7 +743,8 @@
             let bearing =
                 Math.atan2(y, x)
                 *
-                180 / Math.PI;
+                180 /
+                Math.PI;
 
 
             bearing =
@@ -871,18 +756,11 @@
 
 
             destinationInfo.innerHTML =
-
                 `목적지<br>` +
-
-                `위도: ` +
-                `${destinationLatitude.toFixed(6)}<br>` +
-
-                `경도: ` +
-                `${destinationLongitude.toFixed(6)}<br>` +
-
+                `위도: ${destinationLatitude.toFixed(6)}<br>` +
+                `경도: ${destinationLongitude.toFixed(6)}<br>` +
                 `<strong>` +
-                `목적지 방위각: ` +
-                `${bearing.toFixed(1)}°` +
+                `목적지 방위각: ${bearing.toFixed(1)}°` +
                 `</strong>`;
 
 
@@ -892,13 +770,11 @@
 
 
         // =========================================
-        // 지도 클릭 → 목적지 설정
+        // 지도 클릭
         // =========================================
 
         map.on(
-
             "click",
-
             function(event) {
 
                 destinationLatitude =
@@ -910,7 +786,7 @@
 
 
                 // =================================
-                // 기존 목적지 삭제
+                // 기존 목적지 마커 삭제
                 // =================================
 
                 if (
@@ -925,19 +801,15 @@
 
 
                 // =================================
-                // 목적지 마커
+                // 새 목적지 마커
                 // =================================
 
                 destinationMarker =
                     L.marker(
-
                         [
-
                             destinationLatitude,
                             destinationLongitude
-
                         ]
-
                     )
                     .addTo(map);
 
@@ -947,32 +819,14 @@
                     .openPopup();
 
 
-                // =================================
-                // 방위각 계산
-                // =================================
-
                 calculateBearing();
 
             }
-
         );
 
 
         // =========================================
         // Quaternion → Heading
-        // =========================================
-        //
-        // AbsoluteOrientationSensor의
-        // quaternion을 이용해서
-        // 스마트폰의 yaw 방향을 계산한다.
-        //
-        // 결과:
-        // 0 ~ 360°
-        //
-        // 주의:
-        // 기기 화면 방향과 브라우저 좌표계에 따라
-        // 실제 북쪽과 오프셋이 생길 수 있다.
-        //
         // =========================================
 
         function quaternionToHeading(
@@ -993,8 +847,7 @@
 
 
             /*
-             * quaternion에서
-             * yaw 회전각을 계산한다.
+             * Quaternion을 yaw로 변환
              */
 
             const sinYaw =
@@ -1014,7 +867,7 @@
                 );
 
 
-            let yaw =
+            let heading =
                 Math.atan2(
                     sinYaw,
                     cosYaw
@@ -1024,33 +877,27 @@
                 Math.PI;
 
 
-            /*
-             * -180~180
-             * →
-             * 0~360
-             */
-
-            yaw =
-                normalizeAngle(yaw);
+            heading =
+                normalizeAngle(heading);
 
 
-            return yaw;
+            return heading;
 
         }
 
 
         // =========================================
-        // AbsoluteOrientationSensor
+        // AbsoluteOrientationSensor 시작
         // =========================================
 
-        function startAbsoluteOrientationSensor() {
+        function startOrientationSensor() {
 
             if (
                 typeof AbsoluteOrientationSensor ===
                 "undefined"
             ) {
 
-                sensorInfo.innerHTML =
+                sensorInfo.textContent =
                     "AbsoluteOrientationSensor를 " +
                     "지원하지 않는 기기입니다.";
 
@@ -1062,21 +909,19 @@
             try {
 
                 orientationSensor =
-                    new AbsoluteOrientationSensor({
-
-                        frequency: 30
-
-                    });
+                    new AbsoluteOrientationSensor(
+                        {
+                            frequency: 30
+                        }
+                    );
 
 
                 // =================================
-                // 센서 reading
+                // 센서 데이터
                 // =================================
 
                 orientationSensor.addEventListener(
-
                     "reading",
-
                     function() {
 
                         const quaternion =
@@ -1093,12 +938,25 @@
 
 
                         /*
-                         * quaternion → heading
+                         * Quaternion
+                         * →
+                         * Heading
                          */
 
-                        const heading =
+                        let heading =
                             quaternionToHeading(
                                 quaternion
+                            );
+
+
+                        /*
+                         * 기기/브라우저 오프셋 보정
+                         */
+
+                        heading =
+                            normalizeAngle(
+                                heading +
+                                HEADING_OFFSET
                             );
 
 
@@ -1106,24 +964,16 @@
                             heading;
 
 
-                        /*
-                         * 센서 정보를 한 곳에서만
-                         * 출력한다.
-                         *
-                         * 따라서 이전처럼
-                         * 다른 이벤트와 화면을
-                         * 서로 덮어쓰지 않는다.
-                         */
+                        // =================================
+                        // 센서 정보
+                        // =================================
 
                         sensorInfo.innerHTML =
 
                             `<strong>` +
-                            `AbsoluteOrientationSensor 작동 중` +
-                            `</strong><br><br>` +
-
                             `현재 heading: ` +
                             `${heading.toFixed(1)}°` +
-                            `<br><br>` +
+                            `</strong><br><br>` +
 
                             `Quaternion<br>` +
 
@@ -1144,14 +994,13 @@
 
 
                         /*
-                         * 목적지가 있다면
-                         * 나침반 즉시 업데이트
+                         * heading이 바뀔 때마다
+                         * 나침반 즉시 갱신
                          */
 
                         updateCompass();
 
                     }
-
                 );
 
 
@@ -1160,9 +1009,7 @@
                 // =================================
 
                 orientationSensor.addEventListener(
-
                     "error",
-
                     function(event) {
 
                         console.error(
@@ -1170,18 +1017,13 @@
                         );
 
 
-                        sensorInfo.innerHTML =
-                            `센서 오류: ` +
-                            `${event.error.name}`;
+                        sensorInfo.textContent =
+                            "센서 오류: " +
+                            event.error.name;
 
                     }
-
                 );
 
-
-                // =================================
-                // 센서 시작
-                // =================================
 
                 orientationSensor.start();
 
@@ -1195,9 +1037,9 @@
                 console.error(error);
 
 
-                sensorInfo.innerHTML =
-                    `센서 시작 실패: ` +
-                    `${error.name}`;
+                sensorInfo.textContent =
+                    "센서 시작 실패: " +
+                    error.name;
 
 
                 return false;
@@ -1211,32 +1053,23 @@
         // 나침반 시작
         // =========================================
 
-        async function startCompass() {
+        function startCompass() {
 
             sensorInfo.textContent =
-                "AbsoluteOrientationSensor 시작 중...";
+                "방향 센서 시작 중...";
 
 
-            /*
-             * AbsoluteOrientationSensor를
-             * 시작한다.
-             */
-
-            const started =
-                startAbsoluteOrientationSensor();
+            const success =
+                startOrientationSensor();
 
 
             if (
-                !started
+                !success
             ) {
 
                 return;
 
             }
-
-
-            sensorStarted =
-                true;
 
 
             startButton.textContent =
@@ -1253,26 +1086,14 @@
         // 버튼
         // =========================================
 
-        locationButton.addEventListener(
-
-            "click",
-
-            startLocationTracking
-
-        );
-
-
         startButton.addEventListener(
-
             "click",
-
             startCompass
-
         );
 
 
         // =========================================
-        // 초기 화면
+        // 초기화
         // =========================================
 
         showFrame(
@@ -1280,15 +1101,10 @@
         );
 
 
-        // =========================================
-        // 페이지 시작
-        // =========================================
-
         startLocationTracking();
 
 
     </script>
-
 
 </body>
 
