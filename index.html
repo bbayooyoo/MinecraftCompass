@@ -901,27 +901,34 @@
             currentHeading =
                 heading;
 
+            
+
+            const compassHeading =
+                event.webkitCompassHeading;
 
             sensorInfo.innerHTML =
 
-                `현재 heading: ` +
-                `${heading.toFixed(1)}°<br>` +
+                `alpha: ${event.alpha.toFixed(1)}°<br>` +
 
-                `alpha: ` +
-                `${event.alpha.toFixed(1)}°<br>` +
+                `beta: ${
+                    event.beta === null
+                        ? "없음"
+                        : event.beta.toFixed(1)
+                }°<br>` +
 
-                `beta: ` +
-                `${event.beta === null
-                    ? "없음"
-                    : event.beta.toFixed(1)}°<br>` +
+                `gamma: ${
+                    event.gamma === null
+                        ? "없음"
+                        : event.gamma.toFixed(1)
+                }°<br>` +
 
-                `gamma: ` +
-                `${event.gamma === null
-                    ? "없음"
-                    : event.gamma.toFixed(1)}°<br>` +
+                `absolute: ${event.absolute}<br>` +
 
-                `absolute: ` +
-                `${event.absolute}`;
+                `webkitCompassHeading: ${
+                    compassHeading === undefined
+                        ? "없음"
+                        : compassHeading.toFixed(1) + "°"
+                }`;
 
 
             // 나침반 업데이트
