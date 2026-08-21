@@ -999,67 +999,129 @@
         // =========================================
         // 센서 시작
         // =========================================
-
         async function startCompass() {
 
             sensorInfo.textContent =
-                "방향 센서를 시작하는 중...";
+                "AbsoluteOrientationSensor 확인 중...";
 
 
-            /*
-             * iOS 등 일부 브라우저에서는
-             * 사용자 동작으로 권한을 요청해야 한다.
-             */
+            // =========================================
+            // AbsoluteOrientationSensor 지원 여부 확인
+            // =========================================
 
             if (
-
-                typeof DeviceOrientationEvent !==
+                typeof AbsoluteOrientationSensor ===
                 "undefined"
-
-                &&
-
-                typeof DeviceOrientationEvent
-                    .requestPermission ===
-                    "function"
-
             ) {
 
-                try {
+                sensorInfo.textContent =
+                    "AbsoluteOrientationSensor: 지원되지 않음";
 
-                    const permission =
-
-                        await
-                        DeviceOrientationEvent
-                            .requestPermission();
-
-
-                    if (
-                        permission !== "granted"
-                    ) {
-
-                        sensorInfo.textContent =
-                            "방향 센서 권한이 거부되었습니다.";
-
-                        return;
-
-                    }
-
-                }
-
-                catch (error) {
-
-                    console.error(error);
-
-                    sensorInfo.textContent =
-                        "방향 센서 권한 요청 중 오류가 발생했습니다.";
-
-                    return;
-
-                }
+                return;
 
             }
 
 
+            // =========================================
+            // 센서 생성 및 시작
+            // =========================================
+
+            try {
+
+                const sensor =
+                    new AbsoluteOrientationSensor({
+                        frequency: 30
+                    });
+
+
+                // =====================================
+                // 센서 데이터 수신
+                // =====================================
+
+                sensor.addEventListener(
+                    "reading",
+                    function () {
+
+                        const quaternion =
+                            sensor.quaternion;
+
+
+                        if (!quaternion) {
+
+                            sensorInfo.textContent =
+                                "센서 데이터 없음";
+
+                            return;
+
+                        }
+
+
+                        sensorInfo.innerHTML =
+
+                            `AbsoluteOrientationSensor 작동 중<br>` +
+
+                            `Quaternion<br>` +
+
+                            `x: ${quaternion[0].toFixed(4)}<br>` +
+
+                            `y: ${quaternion[1].toFixed(4)}<br>` +
+
+                            `z: ${quaternion[2].toFixed(4)}<br>` +
+
+                            `w: ${quaternion[3].toFixed(4)}`;
+
+                    }
+                );
+
+
+                // =====================================
+                // 센서 오류
+                // =====================================
+
+                sensor.addEventListener(
+                    "error",
+                    function (event) {
+
+                        console.error(event.error);
+
+
+                        sensorInfo.textContent =
+                            "센서 오류: " +
+                            event.error.name;
+
+                    }
+                );
+
+
+                // =====================================
+                // 센서 시작
+                // =====================================
+
+                sensor.start();
+
+
+                startButton.textContent =
+                    "AbsoluteOrientationSensor 작동 중";
+
+
+                startButton.disabled =
+                    true;
+
+            }
+
+
+            catch (error) {
+
+                console.error(error);
+
+
+                sensorInfo.textContent =
+                    "센서 시작 실패: " +
+                    error.name;
+
+            }
+
+        }
             /*
              * 일반 방향 이벤트
              */
